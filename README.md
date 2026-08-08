@@ -156,7 +156,7 @@ Gratefully built on other people's brilliant work — lightly tuned, then given 
 | --- | --- |
 | `tdd`, `grill-with-docs`, `to-issues`, `diagnose`, `handoff` | Created by [Matt Pocock](https://github.com/mattpocock/skills), lightly adjusted |
 | `mentor-me` | Created by [Alex Kawa ("Paddy")](https://github.com/AlexKawaPaddy) |
-| `mal-reviewfix`, the collection, installer & this repo | [Pierre-Malick](https://github.com/Pierre-Malick) a.k.a. **yaaintmal** |
+| `mal-reviewfix`, `mal-sonar-refacplan`, the collection, installer & this repo | [Pierre-Malick](https://github.com/Pierre-Malick) a.k.a. **yaaintmal** |
 
 > The installer (`install.fish` / `install.sh`), the family structure, `mal-reviewfix`, and the collection
 > are originals from **yaaintmal** — the shelf they all live on. Everything else is a loving, lightly-tuned
