@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 yaadtmal (Pierre-Malick)
+Copyright (c) 2026 yaaintmal (Pierre-Malick)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -29,5 +29,5 @@ copyright and licensing of their upstream authors (see README "Credits &
 origins"): Matt Pocock (tdd, grill-with-docs, to-issues, diagnose, handoff)
 and Alex Kawa "Paddy" (mentor-me). All remaining content — the installer
 (bin/ + scripts/), the collection structure, mal-reviewfix, and friends — is
-Copyright (c) 2026 yaadtmal (Pierre-Malick) and licensed under the MIT License
+Copyright (c) 2026 yaaintmal (Pierre-Malick) and licensed under the MIT License
 above.
