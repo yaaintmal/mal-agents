@@ -72,6 +72,17 @@ function __mal_skills
     end
 end
 
+function __mal_skill_name_width
+    set -l width 16
+    for skill in (__mal_skills)
+        set -l length (string length -- "$skill")
+        if test $length -gt $width
+            set width $length
+        end
+    end
+    echo $width
+end
+
 function __mal_platform
     set -l skill $argv[1]
     set -l line (grep -m1 '^platforms:' "$REPO_DIR/$skill/SKILL.md" 2>/dev/null)
@@ -182,6 +193,8 @@ end
 function __mal_render_row
     set -l idx   $argv[1]
     set -l skill $argv[2]
+    set -l marker $argv[3]
+    set -l checked $argv[4]
     set -l plat  (__mal_platform "$skill")
     set -l state (__mal_status "$skill")
 
@@ -203,7 +216,13 @@ function __mal_render_row
             set s "$c_dim""○""$c_reset"
     end
 
-    printf '  %-3s %-16s %-10s %s\n' "$idx" "$skill" "$p" "$state"
+    if test (count $argv) -ge 3
+        printf '  %s [%s] %-3s %-*s %-10s %s\n' \
+            "$marker" "$checked" "$idx" $SKILL_WIDTH "$skill" "$p" "$state"
+    else
+        printf '  %-3s %-*s %-10s %s\n' \
+            "$idx" $SKILL_WIDTH "$skill" "$p" "$state"
+    end
 end
 
 function __mal_banner
@@ -212,8 +231,8 @@ function __mal_banner
 
     printf '\n'
     printf '%s%s%s\n' "$c_bold""$c_cyan" '  ┌─────────────────────────────────────────────┐' "$c_reset"
-    printf '%s%s%s\n' "$c_bold""$c_cyan" '  │          mal-agents · opencode menu          │' "$c_reset"
-    printf '%s%s%s\n' "$c_bold""$c_cyan" '  │         battle-tested skills, shipped         │' "$c_reset"
+    printf '%s%s%s\n' "$c_bold""$c_cyan" '  │      mal-agents · collection installer      │' "$c_reset"
+    printf '%s%s%s\n' "$c_bold""$c_cyan" '  │         battle-tested skills, shipped       │' "$c_reset"
     printf '%s%s%s\n' "$c_bold""$c_cyan" '  └─────────────────────────────────────────────┘' "$c_reset"
     printf '\n'
     printf '  %sos:%s %s  %sshell:%s %s  %s→%s %s\n' \
@@ -248,6 +267,7 @@ function __mal_distro
 end
 
 # ── main ────────────────────────────────────────────────────────────────────
+set -g SKILL_WIDTH (__mal_skill_name_width)
 
 if not set -q _flag_quiet
     __mal_banner
@@ -334,35 +354,145 @@ if not set -q skills[1]
     exit 1
 end
 
-printf '  %sAvailable skills%s\n\n' "$c_bold" "$c_reset"
-set -l idx 0
-for skill in $skills
-    set idx (math $idx + 1)
-    __mal_render_row $idx "$skill"
-end
-
-printf '\n  %sEnter numbers %s%s for all, or %s%s to quit: %s' \
-    $c_dim \
-    "$c_cyan""a""$c_reset" \
-    "$c_yellow""q""$c_reset" \
-    $c_reset
-read -l answer
-
 set -l picks
-for tok in (string split -- ' ' -- $answer | string split -- ',')
-    switch "$tok"
-        case 'a' 'all'
-            set picks $skills
-        case 'q'
-            echo "  bye 👋"
-            exit 0
-        case '*'
-            if string match -qr '^[0-9]+$' -- "$tok"
-                set -l n (math $tok)
-                if test $n -ge 1 && test $n -le (count $skills)
-                    set -a picks $skills[$n]
-                end
+if isatty stdin; and isatty stdout
+    set -l selected
+    for skill in $skills
+        if __mal_installed "$skill"
+            set -a selected 1
+        else
+            set -a selected 0
+        end
+    end
+
+    set -l cursor 1
+    set -l cancelled 0
+    set -g __mal_stty_state (stty -g </dev/tty)
+    function __mal_menu_cleanup --on-signal INT
+        stty "$__mal_stty_state" </dev/tty
+        printf '\e[?25h\n'
+        exit 130
+    end
+
+    stty -icanon -echo min 1 time 0 </dev/tty
+    printf '\e[?25l'
+    while true
+        printf '\e[2J\e[H'
+        __mal_banner
+        printf '  %sAvailable skills%s\n\n' "$c_bold" "$c_reset"
+        set -l idx 0
+        for skill in $skills
+            set idx (math $idx + 1)
+            set -l marker ' '
+            if test $idx -eq $cursor
+                set marker '❯'
             end
+            set -l checked ' '
+            if test $selected[$idx] -eq 1
+                set checked x
+            end
+            __mal_render_row $idx "$skill" "$marker" "$checked"
+        end
+        printf '  %s↑/↓ move · Space select · a all · Enter confirm · q cancel%s\n' \
+            $c_dim $c_reset
+
+        set -l key (dd if=/dev/tty bs=1 count=1 2>/dev/null)
+        set -l esc (printf '\e')
+        if test "$key" = "$esc"
+            set -l sequence (dd if=/dev/tty bs=1 count=2 2>/dev/null)
+            switch "$sequence"
+                case '[A'
+                    set cursor (math $cursor - 1)
+                case '[B'
+                    set cursor (math $cursor + 1)
+                case '*'
+                    set cancelled 1
+                    break
+            end
+        else
+            switch "$key"
+                case ''
+                    break
+                case ' '
+                    if test $selected[$cursor] -eq 1
+                        set selected[$cursor] 0
+                    else
+                        set selected[$cursor] 1
+                    end
+                case j
+                    set cursor (math $cursor + 1)
+                case k
+                    set cursor (math $cursor - 1)
+                case a
+                    set -l all_selected 1
+                    for value in $selected
+                        if test $value -ne 1
+                            set all_selected 0
+                        end
+                    end
+                    for idx in (seq (count $selected))
+                        if test $all_selected -eq 1
+                            set selected[$idx] 0
+                        else
+                            set selected[$idx] 1
+                        end
+                    end
+                case q
+                    set cancelled 1
+                    break
+            end
+        end
+
+        if test $cursor -lt 1
+            set cursor (count $skills)
+        else if test $cursor -gt (count $skills)
+            set cursor 1
+        end
+    end
+
+    stty "$__mal_stty_state" </dev/tty
+    printf '\e[?25h'
+    functions --erase __mal_menu_cleanup
+    set -e __mal_stty_state
+    if test $cancelled -eq 1
+        echo "  bye 👋"
+        exit 0
+    end
+    for idx in (seq (count $skills))
+        if test $selected[$idx] -eq 1
+            set -a picks $skills[$idx]
+        end
+    end
+else
+    printf '  %sAvailable skills%s\n\n' "$c_bold" "$c_reset"
+    set -l idx 0
+    for skill in $skills
+        set idx (math $idx + 1)
+        __mal_render_row $idx "$skill"
+    end
+
+    printf '\n  %sEnter numbers %s%s for all, or %s%s to quit: %s' \
+        $c_dim \
+        "$c_cyan""a""$c_reset" \
+        "$c_yellow""q""$c_reset" \
+        $c_reset
+    read -l answer
+
+    for tok in (string split -- ' ' -- $answer | string split -- ',')
+        switch "$tok"
+            case 'a' 'all'
+                set picks $skills
+            case 'q'
+                echo "  bye 👋"
+                exit 0
+            case '*'
+                if string match -qr '^[0-9]+$' -- "$tok"
+                    set -l n (math $tok)
+                    if test $n -ge 1 && test $n -le (count $skills)
+                        set -a picks $skills[$n]
+                    end
+                end
+        end
     end
 end
 

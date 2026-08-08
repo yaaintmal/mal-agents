@@ -83,6 +83,14 @@ list_skills() {
     done | sort
 }
 
+skill_name_width() {
+    local width=16 name
+    while IFS= read -r name; do
+        [ "${#name}" -gt "$width" ] && width="${#name}"
+    done < <(list_skills)
+    echo "$width"
+}
+
 platform_of() {
     local skill="$1" line
     line="$(grep -m1 '^platforms:' "$REPO_DIR/$skill/SKILL.md" 2>/dev/null || true)"
@@ -152,6 +160,7 @@ status_of() {
 
 render_row() {
     local idx="$1" skill="$2" plat status p s
+    local marker="${3:-}" checked="${4:-}"
     plat="$(platform_of "$skill")"
     status="$(status_of "$skill")"
 
@@ -166,7 +175,13 @@ render_row() {
         *)          s="${C_DIM}○${C_RESET}" ;;
     esac
 
-    printf '  %-3s %-16s %-10s %s\n' "$idx" "$skill" "$p" "$status"
+    if [ -n "$marker" ]; then
+        printf '  %s [%s] %-3s %-*s %-10s %s\n' \
+            "$marker" "$checked" "$idx" "$SKILL_WIDTH" "$skill" "$p" "$status"
+    else
+        printf '  %-3s %-*s %-10s %s\n' \
+            "$idx" "$SKILL_WIDTH" "$skill" "$p" "$status"
+    fi
 }
 
 install_skill() {
@@ -206,8 +221,8 @@ distro_name() {
 banner() {
     printf '\n'
     printf '%s%s%s\n' "${C_BOLD}${C_CYAN}" '  ┌─────────────────────────────────────────────┐' "${C_RESET}"
-    printf '%s%s%s\n' "${C_BOLD}${C_CYAN}" '  │          mal-agents · opencode menu          │' "${C_RESET}"
-    printf '%s%s%s\n' "${C_BOLD}${C_CYAN}" '  │         battle-tested skills, shipped         │' "${C_RESET}"
+    printf '%s%s%s\n' "${C_BOLD}${C_CYAN}" '  │      mal-agents · collection installer      │' "${C_RESET}"
+    printf '%s%s%s\n' "${C_BOLD}${C_CYAN}" '  │         battle-tested skills, shipped       │' "${C_RESET}"
     printf '%s%s%s\n' "${C_BOLD}${C_CYAN}" '  └─────────────────────────────────────────────┘' "${C_RESET}"
     printf '\n'
     printf '  %sos:%s %s  %sshell:%s %s  %s→%s %s\n' \
@@ -215,6 +230,94 @@ banner() {
         "${C_DIM}" "${C_RESET}" "$(basename "${SHELL:-unknown}")" \
         "${C_DIM}" "${C_RESET}" "$DEST"
     printf '\n'
+}
+
+SKILL_WIDTH="$(skill_name_width)"
+
+interactive_menu() {
+    local -a selected=()
+    local i key sequence all_selected
+
+    for i in "${!skills[@]}"; do
+        if is_installed "${skills[$i]}"; then
+            selected[$i]=1
+        else
+            selected[$i]=0
+        fi
+    done
+
+    draw_menu() {
+        local j marker checked
+        for j in "${!skills[@]}"; do
+            if [ "$j" -eq "$cursor" ]; then marker="❯"; else marker=" "; fi
+            if [ "${selected[$j]}" -eq 1 ]; then checked="x"; else checked=" "; fi
+            render_row "$((j + 1))" "${skills[$j]}" "$marker" "$checked"
+        done
+        printf '  %s↑/↓ move · Space select · a all · Enter confirm · q cancel%s\n' \
+            "$C_DIM" "$C_RESET"
+    }
+
+    cursor=0
+    printf '  %sAvailable skills%s\n\n' "${C_BOLD}" "${C_RESET}"
+    draw_menu
+    printf '\033[?25l'
+    cleanup_menu() {
+        printf '\033[?25h'
+    }
+    trap cleanup_menu EXIT
+    trap 'cleanup_menu; exit 130' INT TERM
+
+    while true; do
+        key=""
+        IFS= read -rsn1 key
+        case "$key" in
+            $'\x1b')
+                sequence=""
+                IFS= read -rsn2 -t 0.1 sequence || true
+                case "$sequence" in
+                    '[A') cursor=$((cursor - 1)) ;;
+                    '[B') cursor=$((cursor + 1)) ;;
+                    *) PICKS=(); return 0 ;;
+                esac
+                ;;
+            $'\x0a'|$'\x0d')
+                break
+                ;;
+            " ")
+                if [ "${selected[$cursor]}" -eq 1 ]; then
+                    selected[$cursor]=0
+                else
+                    selected[$cursor]=1
+                fi
+                ;;
+            j) cursor=$((cursor + 1)) ;;
+            k) cursor=$((cursor - 1)) ;;
+            a)
+                all_selected=1
+                for i in "${!skills[@]}"; do
+                    [ "${selected[$i]}" -eq 1 ] || all_selected=0
+                done
+                for i in "${!skills[@]}"; do
+                    if [ "$all_selected" -eq 1 ]; then selected[$i]=0; else selected[$i]=1; fi
+                done
+                ;;
+            q)
+                PICKS=()
+                return 0
+                ;;
+        esac
+
+        [ "$cursor" -lt 0 ] && cursor=$((${#skills[@]} - 1))
+        [ "$cursor" -ge "${#skills[@]}" ] && cursor=0
+        printf '\033[%dA' "$((${#skills[@]} + 1))"
+        printf '\033[2K\r'
+        draw_menu
+    done
+
+    PICKS=()
+    for i in "${!skills[@]}"; do
+        [ "${selected[$i]}" -eq 1 ] && PICKS+=("${skills[$i]}")
+    done
 }
 
 # ── main ─────────────────────────────────────────────────────────────────────
@@ -298,34 +401,39 @@ if [ ${#skills[@]} -eq 0 ]; then
     exit 1
 fi
 
-printf '  %sAvailable skills%s\n\n' "${C_BOLD}" "${C_RESET}"
-idx=0
-for skill in "${skills[@]}"; do
-    idx=$((idx + 1))
-    render_row "$idx" "$skill"
-done
+if [ -t 0 ] && [ -t 1 ]; then
+    interactive_menu
+    picks=("${PICKS[@]}")
+else
+    printf '  %sAvailable skills%s\n\n' "${C_BOLD}" "${C_RESET}"
+    idx=0
+    for skill in "${skills[@]}"; do
+        idx=$((idx + 1))
+        render_row "$idx" "$skill"
+    done
 
-printf '\n  %sEnter numbers %s%s for all, or %s%s to quit: %s' \
-    "${C_DIM}" \
-    "${C_CYAN}a${C_RESET}" \
-    "${C_YELLOW}q${C_RESET}" \
-    "${C_RESET}"
+    printf '\n  %sEnter numbers %s%s for all, or %s%s to quit: %s' \
+        "${C_DIM}" \
+        "${C_CYAN}a${C_RESET}" \
+        "${C_YELLOW}q${C_RESET}" \
+        "${C_RESET}"
 
-read -r answer
+    read -r answer
 
-picks=()
-IFS=' ,' read -ra tokens <<< "$answer"
-for tok in "${tokens[@]}"; do
-    case "$tok" in
-        a|all) picks=("${skills[@]}") ;;
-        q) echo "  bye 👋"; exit 0 ;;
-        *)
-            if [[ "$tok" =~ ^[0-9]+$ ]] && [ "$tok" -ge 1 ] && [ "$tok" -le "${#skills[@]}" ]; then
-                picks+=("${skills[$((tok - 1))]}")
-            fi
-            ;;
-    esac
-done
+    picks=()
+    IFS=' ,' read -ra tokens <<< "$answer"
+    for tok in "${tokens[@]}"; do
+        case "$tok" in
+            a|all) picks=("${skills[@]}") ;;
+            q) echo "  bye 👋"; exit 0 ;;
+            *)
+                if [[ "$tok" =~ ^[0-9]+$ ]] && [ "$tok" -ge 1 ] && [ "$tok" -le "${#skills[@]}" ]; then
+                    picks+=("${skills[$((tok - 1))]}")
+                fi
+                ;;
+        esac
+    done
+fi
 
 if [ ${#picks[@]} -gt 0 ]; then
     printf '\n'
