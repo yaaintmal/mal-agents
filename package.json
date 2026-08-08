@@ -1,6 +1,6 @@
 {
   "name": "mal-agents",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Install the mal-agents skill family (opencode main menu) — interactive fish installer with bash fallback, installable via npx",
   "author": {
     "name": "yaaintmal",
