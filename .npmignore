@@ -1,0 +1,31 @@
+# ── repo-wide editor/config cruft — keep the npm tarball lean ────────────────
+# skills, bin/, scripts/ and doc files are whitelisted via package.json "files".
+# Anything here must NOT end up in the publimished tarball.
+.zed/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# secrets / keys — never ship these
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# logs & junk
+*.log
+node_modules/
+*.tgz
+dist/
+build/
+coverage/
+
+# installer / consumer-project artifacts
+.mal-agents-installed
+.reviewfix/
+CONTEXT.md
+CONTEXT-MAP.md
+docs/adr/

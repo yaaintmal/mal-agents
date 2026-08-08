@@ -1,0 +1,47 @@
+{
+  "name": "mal-agents",
+  "version": "1.0.0",
+  "description": "Install the mal-agents skill family (opencode main menu) — interactive fish installer with bash fallback, installable via npx",
+  "author": {
+    "name": "yaaintmal",
+    "email": "me@malick.cloud",
+    "url": "https://github.com/yaaintmal"
+  },
+  "homepage": "https://github.com/yaaintmal/mal-agents",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yaaintmal/mal-agents.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yaaintmal/mal-agents/issues"
+  },
+  "bin": {
+    "mal-agents": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "diagnose/",
+    "grill-with-docs/",
+    "handoff/",
+    "mal-reviewfix/",
+    "mal-sonar-refacplan/",
+    "mentor-me/",
+    "tdd/",
+    "to-issues/",
+    "triage/",
+    "write-a-skill/",
+    "SKILL-TEMPLATE.md"
+  ],
+  "scripts": {
+    "publish:cli": "npm publish --access public"
+  },
+  "keywords": ["skills", "opencode", "agents", "cli", "installer", "bash", "fish", "ai", "developer-experience"],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

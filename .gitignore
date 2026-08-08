@@ -131,7 +131,7 @@ docs/adr/
 
 # ── Installer artifacts ──────────────────────────────────────────────────────
 .mal-agents-installed
-
+AGENTS.md
 # ─────────────────────────────────────────────────────────────────────────────
 #  A gentle note for the vim/emacs souls who find this file: yes, *.swp and
 #  *~ are ignored. Go forth and <Esc>:wq in peace. — mal-agents 🐟

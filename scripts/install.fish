@@ -16,7 +16,8 @@
 #   ./install.fish --help
 # ─────────────────────────────────────────────────────────────────────────────
 
-set -g REPO_DIR (realpath (dirname (status --current-filename)))
+set -g SCRIPT_DIR (realpath (dirname (status --current-filename)))
+set -g REPO_DIR (realpath "$SCRIPT_DIR/..")
 set -g DEST "$HOME/.agents/skills"
 set -g MANIFEST_FILE ".mal-agents-installed"
 

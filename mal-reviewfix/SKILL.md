@@ -8,7 +8,7 @@ description: >-
   commit/PR. Auto-fixes safe lint/import issues; writes
   .reviewfix/report.json; may invoke /tdd, /diagnose, or /grill-with-docs for
   coverage gaps.
-platforms: open
+platforms: all
 disable-model-invocation: true
 ---
 
