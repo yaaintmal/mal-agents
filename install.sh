@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# mal-agents installer — POSIX-bash fallback
+# mal-agents installer — Bash fallback
 #
 # Same job as install.fish, for non-fish shells and CI. Idempotent. No root.
 # If you can, run `./install.fish` instead — this is the tofu option.
@@ -101,11 +101,30 @@ git_rev() {
 
 is_installed() { [ -L "$DEST/$1" ]; }
 
-installed_skills() {
-    local link
-    for link in "$DEST"/*; do
-        [ -L "$link" ] && basename "$link"
-    done
+managed_skills() {
+    local skill _rev
+    [ -f "$MANIFEST" ] || return 0
+    while read -r skill _rev; do
+        [ -n "$skill" ] && echo "$skill"
+    done < "$MANIFEST"
+}
+
+write_manifest() {
+    local rev skill
+    local -a skills=()
+    if [ "$#" -gt 0 ]; then
+        mapfile -t skills < <(printf '%s\n' "$@" | sort -u)
+    else
+        mapfile -t skills < <(managed_skills)
+    fi
+
+    rm -f "$MANIFEST"
+    rev="$(git_rev)"
+    if [ -n "$rev" ]; then
+        for skill in "${skills[@]}"; do
+            [ -f "$REPO_DIR/$skill/SKILL.md" ] && echo "$skill $rev" >> "$MANIFEST"
+        done
+    fi
 }
 
 manifest_rev() {
@@ -113,18 +132,6 @@ manifest_rev() {
     [ -f "$MANIFEST" ] || return 0
     line="$(grep -m1 "^$skill " "$MANIFEST" 2>/dev/null || true)"
     [ -n "$line" ] && echo "${line#* }"
-}
-
-write_manifest() {
-    rm -f "$MANIFEST"
-    local rev
-    rev="$(git_rev)"
-    if [ -n "$rev" ]; then
-        local skill
-        for skill in $(installed_skills); do
-            echo "$skill $rev" >> "$MANIFEST"
-        done
-    fi
 }
 
 status_of() {
@@ -225,7 +232,7 @@ if [ "$UNLINK" -eq 1 ]; then
     if [ ${#SKILLS[@]} -gt 0 ]; then
         targets=("${SKILLS[@]}")
     else
-        mapfile -t targets < <(installed_skills)
+        mapfile -t targets < <(managed_skills)
     fi
     if [ ${#targets[@]} -eq 0 ]; then
         echo "  nothing installed — nothing to do."
@@ -234,13 +241,21 @@ if [ "$UNLINK" -eq 1 ]; then
     for skill in "${targets[@]}"; do
         unlink_skill "$skill"
     done
-    write_manifest
+    remaining=()
+    while read -r skill; do
+        skip=0
+        for target in "${targets[@]}"; do
+            [ "$skill" = "$target" ] && skip=1 && break
+        done
+        [ "$skip" -eq 0 ] && remaining+=("$skill")
+    done < <(managed_skills)
+    write_manifest "${remaining[@]}"
     exit 0
 fi
 
 if [ "$REFRESH" -eq 1 ]; then
     targets=()
-    mapfile -t targets < <(installed_skills)
+    mapfile -t targets < <(managed_skills)
     if [ ${#targets[@]} -eq 0 ]; then
         echo "  nothing installed — run without flags to pick some."
         exit 0
@@ -248,7 +263,7 @@ if [ "$REFRESH" -eq 1 ]; then
     for skill in "${targets[@]}"; do
         install_skill "$skill"
     done
-    write_manifest
+    write_manifest "${targets[@]}"
     printf '\n  %s✓%s re-synced %d skill(s)\n' "${C_GREEN}" "${C_RESET}" "${#targets[@]}"
     exit 0
 fi
@@ -257,7 +272,7 @@ if [ "$ALL" -eq 1 ]; then
     for skill in $(list_skills); do
         install_skill "$skill"
     done
-    write_manifest
+    write_manifest $(list_skills)
     printf '\n  %s✓%s installed all skills\n' "${C_GREEN}" "${C_RESET}"
     exit 0
 fi
@@ -270,7 +285,7 @@ if [ ${#SKILLS[@]} -gt 0 ]; then
             printf '%s  %s%s%s\n' "${C_RED}!${C_RESET}" "$skill" "${C_DIM}" " (no such skill)${C_RESET}"
         fi
     done
-    write_manifest
+    write_manifest $(managed_skills) "${SKILLS[@]}"
     exit 0
 fi
 
@@ -316,7 +331,7 @@ if [ ${#picks[@]} -gt 0 ]; then
     for skill in "${picks[@]}"; do
         install_skill "$skill"
     done
-    write_manifest
+    write_manifest $(managed_skills) "${picks[@]}"
     printf '\n  %s✓%s done — %d skill(s) linked into %s\n' \
         "${C_GREEN}" "${C_RESET}" "${#picks[@]}" "$DEST"
 else

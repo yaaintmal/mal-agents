@@ -31,6 +31,21 @@ set -g c_cyan    (set_color cyan)
 set -g c_magenta (set_color magenta)
 
 # ── argument parsing ────────────────────────────────────────────────────────
+function __mal_usage
+    printf '%s\n' \
+        "usage: ./install.fish [options]" \
+        "" \
+        "  (no options)          interactive menu" \
+        "  -a, --all             install every skill" \
+        "  -s, --skill <name>    install one or more skill(s) (repeatable)" \
+        "  -r, --refresh         re-sync installed skills (after git pull)" \
+        "  -u, --unlink          remove installed skills (--skill to scope)" \
+        "  -c, --check           print status table, change nothing" \
+        "  -d, --dest <dir>      install into a custom directory" \
+        "  -q, --quiet           suppress the banner" \
+        "  -h, --help            show this help"
+end
+
 argparse 'a/all' 's/skill=+' 'r/refresh' 'u/unlink' 'c/check' 'd/dest=' 'q/quiet' 'h/help' -- $argv
 or return 1
 
@@ -46,21 +61,6 @@ end
 set -g MANIFEST "$DEST/$MANIFEST_FILE"
 
 # ── helpers ─────────────────────────────────────────────────────────────────
-
-function __mal_usage
-    printf '%s\n' \
-        "usage: ./install.fish [options]" \
-        "" \
-        "  (no options)          interactive menu" \
-        "  -a, --all             install every skill" \
-        "  -s, --skill <name>    install one or more skills (repeatable)" \
-        "  -r, --refresh         re-sync installed skills (after git pull)" \
-        "  -u, --unlink          remove installed skills (--skill to scope)" \
-        "  -c, --check           print status table, change nothing" \
-        "  -d, --dest <dir>      install into a custom directory" \
-        "  -q, --quiet           suppress the banner" \
-        "  -h, --help            show this help"
-end
 
 function __mal_skills
     for dir in $REPO_DIR/*/
@@ -92,12 +92,20 @@ function __mal_installed
     test -L "$DEST/$skill"
 end
 
-function __mal_installed_skills
-    for link in $DEST/*
-        if test -L "$link"
-            basename "$link"
+function __mal_managed_skills
+    if test -f "$MANIFEST"
+        while read -l line; string match -r -g '^([^[:space:]]+)' -- "$line"; end < "$MANIFEST"
+    end
+end
+
+function __mal_contains
+    set -l needle $argv[1]
+    for value in $argv[2..-1]
+        if test "$value" = "$needle"
+            return 0
         end
     end
+    return 1
 end
 
 function __mal_manifest_rev
@@ -111,11 +119,27 @@ function __mal_manifest_rev
 end
 
 function __mal_write_manifest
+    set -l skills
+    if test (count $argv) -gt 0
+        set skills $argv
+    else
+        set skills (__mal_managed_skills)
+    end
+
+    set -l unique_skills
+    for skill in $skills
+        if not __mal_contains "$skill" $unique_skills
+            set -a unique_skills "$skill"
+        end
+    end
+
     rm -f "$MANIFEST"
     set -l rev (__mal_rev)
     if test -n "$rev"
-        for skill in (__mal_installed_skills)
-            echo "$skill $rev" >> "$MANIFEST"
+        for skill in $unique_skills
+            if test -f "$REPO_DIR/$skill/SKILL.md"
+                echo "$skill $rev" >> "$MANIFEST"
+            end
         end
     end
 end
@@ -242,30 +266,36 @@ if set -q _flag_unlink
     if set -q _flag_skill
         set targets $_flag_skill
     else
-        set targets (__mal_installed_skills)
+        set targets (__mal_managed_skills)
     end
-    if test -z "$targets"
+    if not set -q targets[1]
         echo "  nothing installed — nothing to do."
         exit 0
     end
     for skill in $targets
         __mal_unlink "$skill"
     end
-    __mal_write_manifest
+    set remaining
+    for skill in (__mal_managed_skills)
+        if not __mal_contains "$skill" $targets
+            set -a remaining "$skill"
+        end
+    end
+    __mal_write_manifest $remaining
     exit 0
 end
 
 # --refresh: re-sync currently installed skills
 if set -q _flag_refresh
-    set targets (__mal_installed_skills)
-    if test -z "$targets"
+    set targets (__mal_managed_skills)
+    if not set -q targets[1]
         echo "  nothing installed — run without flags to pick some."
         exit 0
     end
     for skill in $targets
         __mal_install "$skill"
     end
-    __mal_write_manifest
+    __mal_write_manifest $targets
     printf '\n  %s✓%s re-synced %d skill(s)\n' "$c_green" "$c_reset" (count $targets)
     exit 0
 end
@@ -275,7 +305,7 @@ if set -q _flag_all
     for skill in (__mal_skills | sort)
         __mal_install "$skill"
     end
-    __mal_write_manifest
+    __mal_write_manifest (__mal_skills | sort)
     printf '\n  %s✓%s installed all skills\n' "$c_green" "$c_reset"
     exit 0
 end
@@ -290,7 +320,7 @@ if set -q _flag_skill
             printf '%s  %s%s%s\n' "$c_red""!""$c_reset" "$skill" $c_dim " (no such skill)"$c_reset
         end
     end
-    __mal_write_manifest
+    __mal_write_manifest (__mal_managed_skills) $targets
     exit 0
 end
 
@@ -298,7 +328,7 @@ end
 
 set skills (__mal_skills | sort)
 
-if test -z "$skills"
+if not set -q skills[1]
     echo "  no skills found in $REPO_DIR"
     exit 1
 end
@@ -340,7 +370,7 @@ if set -q picks[1]
     for skill in $picks
         __mal_install "$skill"
     end
-    __mal_write_manifest
+    __mal_write_manifest (__mal_managed_skills) $picks
     printf '\n  %s✓%s done — %d skill(s) linked into %s\n' \
         "$c_green" "$c_reset" (count $picks) "$DEST"
 else
